@@ -1,6 +1,11 @@
+import csv
 import re
 import socket
 import subprocess
+from datetime import datetime
+from pathlib import Path
+
+HISTORY_FILE = Path(__file__).parent / "scan_history.csv"
 
 
 def get_arp_output():
@@ -36,24 +41,54 @@ def get_hostname(ip):
         return "unknown"
 
 
+def load_known_macs():
+    """Read the MAC addresses that earlier scans saved to the history file."""
+    known = set()
+    if HISTORY_FILE.exists():
+        with open(HISTORY_FILE, newline="") as file:
+            for row in csv.DictReader(file):
+                known.add(row["mac"])
+    return known
+
+
+def save_scan(devices):
+    """Add this scan's devices to the history file, with the time of the scan."""
+    file_is_new = not HISTORY_FILE.exists()
+    scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(HISTORY_FILE, "a", newline="") as file:
+        writer = csv.writer(file)
+        if file_is_new:
+            writer.writerow(["time", "ip", "mac", "name"])
+        for device in devices:
+            writer.writerow([scan_time, device["ip"], device["mac"], device["name"]])
+
+
 def print_devices(devices):
-    """Print the devices as a table with a count at the bottom."""
-    print(f"{'IP address':<18}{'MAC address':<20}{'Name'}")
-    print("-" * 60)
+    """Print the devices as a table, marking any that were not seen before."""
+    print(f"{'IP address':<18}{'MAC address':<20}{'Name':<24}{'Status'}")
+    print("-" * 68)
+    new_count = 0
     for device in devices:
-        print(f"{device['ip']:<18}{device['mac']:<20}{device['name']}")
-    print(f"\n{len(devices)} device(s) found")
+        status = ""
+        if device["new"]:
+            status = "NEW"
+            new_count += 1
+        print(f"{device['ip']:<18}{device['mac']:<20}{device['name']:<24}{status}")
+    print(f"\n{len(devices)} device(s) found, {new_count} new since earlier scans")
 
 
 def main():
+    known_macs = load_known_macs()
     arp_text = get_arp_output()
     all_entries = parse_devices(arp_text)
     real_devices = []
     for device in all_entries:
         if is_real_device(device):
             device["name"] = get_hostname(device["ip"])
+            device["new"] = device["mac"] not in known_macs
             real_devices.append(device)
     print_devices(real_devices)
+    save_scan(real_devices)
 
 
 if __name__ == "__main__":
