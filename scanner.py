@@ -1,4 +1,5 @@
 import re
+import socket
 import subprocess
 
 
@@ -27,13 +28,21 @@ def is_real_device(device):
     return True
 
 
+def get_hostname(ip):
+    """Ask the network for the name that belongs to an IP address."""
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except OSError:
+        return "unknown"
+
+
 def print_devices(devices):
     """Print the devices as a table with a count at the bottom."""
-    print(f"{'IP address':<18}{'MAC address':<20}{'Type'}")
-    print("-" * 46)
+    print(f"{'IP address':<18}{'MAC address':<20}{'Name'}")
+    print("-" * 60)
     for device in devices:
-        print(f"{device['ip']:<18}{device['mac']:<20}{device['type']}")
-    print(f"\n{len(devices)} device(s) found on the network.")
+        print(f"{device['ip']:<18}{device['mac']:<20}{device['name']}")
+    print(f"\n{len(devices)} device(s) found")
 
 
 def main():
@@ -42,6 +51,7 @@ def main():
     real_devices = []
     for device in all_entries:
         if is_real_device(device):
+            device["name"] = get_hostname(device["ip"])
             real_devices.append(device)
     print_devices(real_devices)
 
